@@ -1,0 +1,187 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  Activity, Baby, BarChart3, Bell, ClipboardList, FlaskConical, HeartPulse,
+  LayoutDashboard, Menu, Moon, Pill, Plus, Search, Settings, ShieldCheck,
+  Stethoscope, Sun, Users, X
+} from "lucide-react";
+import type { ANCRecord, Drug, FollowUp, LabRequest, Patient, Role, Visit } from "./types";
+import { storage } from "./storage";
+
+type Page = "Dashboard" | "Patients" | "Visits" | "Follow-ups" | "Pharmacy" | "Laboratory" | "ANC / Maternity" | "Reports" | "Settings";
+
+const uid = () => crypto.randomUUID();
+const today = () => new Date().toISOString().slice(0, 10);
+
+export default function App() {
+  const [page, setPage] = useState<Page>("Dashboard");
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [followups, setFollowups] = useState<FollowUp[]>([]);
+  const [drugs, setDrugs] = useState<Drug[]>([]);
+  const [labs, setLabs] = useState<LabRequest[]>([]);
+  const [anc, setAnc] = useState<ANCRecord[]>([]);
+  const [role, setRole] = useState<Role>("Super Admin");
+  const [dark, setDark] = useState(false);
+  const [menu, setMenu] = useState(false);
+
+  const refresh = () => {
+    setPatients(storage.patients.all()); setVisits(storage.visits.all());
+    setFollowups(storage.followups.all()); setDrugs(storage.drugs.all());
+    setLabs(storage.labs.all()); setAnc(storage.anc.all());
+  };
+
+  useEffect(() => { storage.seed(); refresh(); }, []);
+  useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
+
+  const navigate = (p: Page) => { setPage(p); setMenu(false); };
+
+  return <div className="app">
+    <aside className={menu ? "sidebar open" : "sidebar"}>
+      <div className="brand"><div className="logo">M</div><div><strong>MaCoKi</strong><small>APMS</small></div><button className="icon mobile-close" onClick={() => setMenu(false)}><X size={20}/></button></div>
+      <nav>
+        {(["Dashboard","Patients","Visits","Follow-ups","Pharmacy","Laboratory","ANC / Maternity","Reports","Settings"] as Page[]).map(item => {
+          const icons: Record<Page, React.ReactNode> = {
+            Dashboard:<LayoutDashboard/>, Patients:<Users/>, Visits:<Stethoscope/>, "Follow-ups":<ClipboardList/>,
+            Pharmacy:<Pill/>, Laboratory:<FlaskConical/>, "ANC / Maternity":<Baby/>, Reports:<BarChart3/>, Settings:<Settings/>
+          };
+          return <button key={item} className={page===item ? "nav active" : "nav"} onClick={() => navigate(item)}>{icons[item]}<span>{item}</span></button>
+        })}
+      </nav>
+      <div className="side-footer"><ShieldCheck size={16}/> Local-first clinic records</div>
+    </aside>
+
+    <main className="main">
+      <header className="topbar">
+        <button className="icon menu-btn" onClick={() => setMenu(true)}><Menu/></button>
+        <div><h1>{page}</h1><span className="muted">MaCoKi Patient Management System</span></div>
+        <div className="top-actions">
+          <select value={role} onChange={e => setRole(e.target.value as Role)}><option>Super Admin</option><option>Clinician</option><option>Pharmacist</option><option>Lab Staff</option><option>Reception</option></select>
+          <button className="icon" onClick={() => setDark(!dark)}>{dark ? <Sun/> : <Moon/>}</button>
+          <button className="icon"><Bell/></button>
+        </div>
+      </header>
+
+      <section className="content">
+        {page === "Dashboard" && <Dashboard patients={patients} visits={visits} drugs={drugs} labs={labs} onNavigate={navigate}/>}
+        {page === "Patients" && <Patients patients={patients} refresh={refresh}/>}
+        {page === "Visits" && <Visits patients={patients} refresh={refresh}/>}
+        {page === "Follow-ups" && <FollowUps patients={patients} followups={followups} refresh={refresh}/>}
+        {page === "Pharmacy" && <Pharmacy drugs={drugs} refresh={refresh}/>}
+        {page === "Laboratory" && <Laboratory patients={patients} labs={labs} refresh={refresh}/>}
+        {page === "ANC / Maternity" && <ANC patients={patients} anc={anc} refresh={refresh}/>}
+        {page === "Reports" && <Reports patients={patients} visits={visits} drugs={drugs} labs={labs} anc={anc}/>}
+        {page === "Settings" && <SettingsPanel role={role} setRole={setRole} dark={dark} setDark={setDark}/>}
+      </section>
+    </main>
+  </div>;
+}
+
+function Dashboard({patients, visits, drugs, labs, onNavigate}: {patients:Patient[];visits:Visit[];drugs:Drug[];labs:LabRequest[];onNavigate:(p:Page)=>void}) {
+  const low = drugs.filter(d => d.quantity <= d.reorderLevel).length;
+  return <div>
+    <div className="welcome"><div><h2>Welcome to MaCoKi APMS</h2><p>Manage patient care, clinical visits and supporting services from one workspace.</p></div><button className="primary" onClick={()=>onNavigate("Patients")}><Plus size={18}/> Register Patient</button></div>
+    <div className="stats">
+      <Stat icon={<Users/>} label="Registered Patients" value={patients.length}/>
+      <Stat icon={<Activity/>} label="Recorded Visits" value={visits.length}/>
+      <Stat icon={<Pill/>} label="Low Stock Items" value={low}/>
+      <Stat icon={<FlaskConical/>} label="Lab Requests" value={labs.length}/>
+    </div>
+    <div className="grid two">
+      <Card title="Quick actions"><div className="quick">
+        <Quick label="Patients" icon={<Users/>} onClick={()=>onNavigate("Patients")}/>
+        <Quick label="New Visit" icon={<Stethoscope/>} onClick={()=>onNavigate("Visits")}/>
+        <Quick label="Pharmacy" icon={<Pill/>} onClick={()=>onNavigate("Pharmacy")}/>
+        <Quick label="ANC" icon={<Baby/>} onClick={()=>onNavigate("ANC / Maternity")}/>
+      </div></Card>
+      <Card title="System status"><div className="status"><span className="dot"/>Local storage active</div><p className="muted">Data in this demo is stored in the browser on this device. It is not a cloud hospital database.</p></Card>
+    </div>
+  </div>
+}
+
+function Stat({icon,label,value}:{icon:React.ReactNode;label:string;value:number}) {
+  return <div className="stat"><div className="stat-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong></div></div>
+}
+function Quick({label,icon,onClick}:{label:string;icon:React.ReactNode;onClick:()=>void}) { return <button className="quick-btn" onClick={onClick}>{icon}<span>{label}</span></button> }
+function Card({title,children}:{title:string;children:React.ReactNode}) { return <div className="card"><h3>{title}</h3>{children}</div> }
+
+function Patients({patients,refresh}:{patients:Patient[];refresh:()=>void}) {
+  const [q,setQ]=useState(""); const [show,setShow]=useState(false);
+  const [form,setForm]=useState({firstName:"",lastName:"",sex:"Female" as Patient["sex"],dateOfBirth:"",phone:"",address:"",nextOfKin:"",bloodGroup:"",genotype:""});
+  const list=patients.filter(p=>(p.firstName+" "+p.lastName+" "+p.hospitalNumber+" "+p.phone).toLowerCase().includes(q.toLowerCase()));
+  const save=()=>{ if(!form.firstName||!form.lastName) return alert("First name and last name are required."); storage.patients.save({id:uid(),hospitalNumber:`MAC-${String(patients.length+1).padStart(4,"0")}`,...form,createdAt:new Date().toISOString()}); setShow(false); setForm({...form,firstName:"",lastName:""}); refresh(); };
+  return <div>
+    <Toolbar title="Patient registry"><button className="primary" onClick={()=>setShow(true)}><Plus size={18}/> Register patient</button></Toolbar>
+    <div className="search"><Search size={18}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search name, hospital number or phone"/></div>
+    <div className="table-wrap"><table><thead><tr><th>Hospital No.</th><th>Patient</th><th>Sex</th><th>Phone</th><th>Blood / Genotype</th></tr></thead><tbody>
+      {list.map(p=><tr key={p.id}><td><b>{p.hospitalNumber}</b></td><td>{p.firstName} {p.lastName}</td><td>{p.sex}</td><td>{p.phone||"—"}</td><td>{p.bloodGroup||"—"} / {p.genotype||"—"}</td></tr>)}
+      {list.length===0&&<tr><td colSpan={5} className="empty">No patients found.</td></tr>}
+    </tbody></table></div>
+    {show&&<Modal title="Register patient" close={()=>setShow(false)}><PatientForm form={form} setForm={setForm} save={save}/></Modal>}
+  </div>
+}
+
+function PatientForm({form,setForm,save}:{form:any;setForm:(v:any)=>void;save:()=>void}) {
+  const set=(k:string,v:string)=>setForm({...form,[k]:v});
+  return <><div className="form-grid">
+    {["firstName","lastName","dateOfBirth","phone","address","nextOfKin","bloodGroup","genotype"].map(k=><label key={k}>{k.replace(/([A-Z])/g," $1")}<input type={k==="dateOfBirth"?"date":"text"} value={form[k]} onChange={e=>set(k,e.target.value)}/></label>)}
+    <label>Sex<select value={form.sex} onChange={e=>set("sex",e.target.value)}><option>Female</option><option>Male</option></select></label>
+  </div><button className="primary full" onClick={save}>Save patient</button></>
+}
+
+function Visits({patients,refresh}:{patients:Patient[];refresh:()=>void}) {
+  const [form,setForm]=useState({patientId:"",complaint:"",assessment:"",treatment:"",clinician:""});
+  const save=()=>{if(!form.patientId||!form.complaint)return alert("Select a patient and enter the complaint.");storage.visits.save({id:uid(),date:today(),status:"Completed",...form});setForm({patientId:"",complaint:"",assessment:"",treatment:"",clinician:""});refresh();alert("Visit saved.");};
+  return <div><Toolbar title="Clinical visits"/><Card title="Record new visit"><div className="form-grid">
+    <label>Patient<select value={form.patientId} onChange={e=>setForm({...form,patientId:e.target.value})}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.id}>{p.hospitalNumber} — {p.firstName} {p.lastName}</option>)}</select></label>
+    <label>Clinician<input value={form.clinician} onChange={e=>setForm({...form,clinician:e.target.value})}/></label>
+    <label>Chief complaint<textarea value={form.complaint} onChange={e=>setForm({...form,complaint:e.target.value})}/></label>
+    <label>Assessment<textarea value={form.assessment} onChange={e=>setForm({...form,assessment:e.target.value})}/></label>
+    <label>Treatment / plan<textarea value={form.treatment} onChange={e=>setForm({...form,treatment:e.target.value})}/></label>
+  </div><button className="primary" onClick={save}>Save visit</button></Card></div>
+}
+
+function FollowUps({patients,followups,refresh}:{patients:Patient[];followups:FollowUp[];refresh:()=>void}) {
+  const [form,setForm]=useState({patientId:"",purpose:"",notes:"",date:today()});
+  const save=()=>{if(!form.patientId||!form.purpose)return alert("Select a patient and purpose.");storage.followups.save({id:uid(),...form,status:"Pending"});setForm({patientId:"",purpose:"",notes:"",date:today()});refresh();};
+  return <div><Toolbar title="Follow-up management"/><Card title="Schedule follow-up"><div className="form-grid">
+    <label>Patient<select value={form.patientId} onChange={e=>setForm({...form,patientId:e.target.value})}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}</select></label>
+    <label>Date<input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label>
+    <label>Purpose<input value={form.purpose} onChange={e=>setForm({...form,purpose:e.target.value})}/></label>
+    <label>Notes<textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
+  </div><button className="primary" onClick={save}>Save follow-up</button></Card><List rows={followups.map(f=>({a:f.date,b:patients.find(p=>p.id===f.patientId)?.firstName+" "+patients.find(p=>p.id===f.patientId)?.lastName,c:f.purpose,d:f.status}))}/></div>
+}
+
+function Pharmacy({drugs,refresh}:{drugs:Drug[];refresh:()=>void}) {
+  const [show,setShow]=useState(false); const [form,setForm]=useState({name:"",batch:"",expiry:"",quantity:"",reorderLevel:"20"});
+  const save=()=>{if(!form.name||!form.expiry)return alert("Drug name and expiry are required.");storage.drugs.save({id:uid(),name:form.name,batch:form.batch,expiry:form.expiry,quantity:Number(form.quantity)||0,reorderLevel:Number(form.reorderLevel)||0});setShow(false);setForm({name:"",batch:"",expiry:"",quantity:"",reorderLevel:"20"});refresh();};
+  return <div><Toolbar title="Pharmacy inventory"><button className="primary" onClick={()=>setShow(true)}><Plus size={18}/> Add drug</button></Toolbar>
+    <div className="table-wrap"><table><thead><tr><th>Drug</th><th>Batch</th><th>Expiry</th><th>Quantity</th><th>Status</th></tr></thead><tbody>{drugs.map(d=><tr key={d.id}><td>{d.name}</td><td>{d.batch||"—"}</td><td>{d.expiry}</td><td>{d.quantity}</td><td><span className={d.quantity<=d.reorderLevel?"badge danger":"badge"}>{d.quantity<=d.reorderLevel?"Reorder":"OK"}</span></td></tr>)}</tbody></table></div>
+    {show&&<Modal title="Add drug" close={()=>setShow(false)}><div className="form-grid">{["name","batch","expiry","quantity","reorderLevel"].map(k=><label key={k}>{k}<input type={k==="expiry"?"date":k==="quantity"||k==="reorderLevel"?"number":"text"} value={(form as any)[k]} onChange={e=>setForm({...form,[k]:e.target.value})}/></label>)}</div><button className="primary full" onClick={save}>Save drug</button></Modal>}
+  </div>
+}
+
+function Laboratory({patients,labs,refresh}:{patients:Patient[];labs:LabRequest[];refresh:()=>void}) {
+  const [form,setForm]=useState({patientId:"",test:""}); const save=()=>{if(!form.patientId||!form.test)return alert("Select patient and test.");storage.labs.save({id:uid(),date:today(),result:"",status:"Requested",...form});setForm({patientId:"",test:""});refresh();};
+  return <div><Toolbar title="Laboratory"><div/></Toolbar><Card title="New laboratory request"><div className="form-grid"><label>Patient<select value={form.patientId} onChange={e=>setForm({...form,patientId:e.target.value})}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}</select></label><label>Test<input value={form.test} onChange={e=>setForm({...form,test:e.target.value})} placeholder="e.g. Malaria RDT"/></label></div><button className="primary" onClick={save}>Create request</button></Card><List rows={labs.map(l=>({a:l.date,b:patients.find(p=>p.id===l.patientId)?.firstName+" "+patients.find(p=>p.id===l.patientId)?.lastName,c:l.test,d:l.status}))}/></div>
+}
+
+function ANC({patients,anc,refresh}:{patients:Patient[];anc:ANCRecord[];refresh:()=>void}) {
+  const [form,setForm]=useState({patientId:"",bookingDate:today(),gravida:"",para:"",gestationalAge:"",riskNotes:"",nextAppointment:""});
+  const save=()=>{if(!form.patientId)return alert("Select a patient.");storage.anc.save({id:uid(),...form});setForm({...form,patientId:""});refresh();};
+  return <div><Toolbar title="ANC / Maternity"><HeartPulse size={20}/></Toolbar><Card title="ANC booking"><div className="form-grid">{[
+    ["patientId","Patient"],["bookingDate","Booking date"],["gravida","Gravida"],["para","Para"],["gestationalAge","Gestational age"],["nextAppointment","Next appointment"]
+  ].map(([k,l])=><label key={k}>{l}{k==="patientId"?<select value={form.patientId} onChange={e=>setForm({...form,patientId:e.target.value})}><option value="">Select patient</option>{patients.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}</select>:<input type={k.includes("Date")||k==="nextAppointment"?"date":"text"} value={(form as any)[k]} onChange={e=>setForm({...form,[k]:e.target.value})}/>}</label>)}<label>Risk notes<textarea value={form.riskNotes} onChange={e=>setForm({...form,riskNotes:e.target.value})}/></label></div><button className="primary" onClick={save}>Save ANC record</button></Card><List rows={anc.map(a=>({a:a.bookingDate,b:patients.find(p=>p.id===a.patientId)?.firstName+" "+patients.find(p=>p.id===a.patientId)?.lastName,c:`G${a.gravida} P${a.para}`,d:a.nextAppointment||"—"}))}/></div>
+}
+
+function Reports({patients,visits,drugs,labs,anc}:{patients:Patient[];visits:Visit[];drugs:Drug[];labs:LabRequest[];anc:ANCRecord[]}) {
+  return <div><Toolbar title="Reports"/><div className="stats"><Stat icon={<Users/>} label="Patients" value={patients.length}/><Stat icon={<Stethoscope/>} label="Visits" value={visits.length}/><Stat icon={<Pill/>} label="Drugs" value={drugs.length}/><Stat icon={<Baby/>} label="ANC records" value={anc.length}/></div><Card title="Service summary"><div className="report-row"><span>Laboratory requests</span><b>{labs.length}</b></div><div className="report-row"><span>Pending follow-up</span><b>{storage.followups.all().filter(f=>f.status==="Pending").length}</b></div><div className="report-row"><span>Low-stock medicines</span><b>{drugs.filter(d=>d.quantity<=d.reorderLevel).length}</b></div></Card></div>
+}
+
+function SettingsPanel({role,setRole,dark,setDark}:{role:Role;setRole:(r:Role)=>void;dark:boolean;setDark:(v:boolean)=>void}) {
+  return <div><Toolbar title="Settings"/><Card title="Application settings"><div className="settings-list"><label>Current role<select value={role} onChange={e=>setRole(e.target.value as Role)}><option>Super Admin</option><option>Clinician</option><option>Pharmacist</option><option>Lab Staff</option><option>Reception</option></select></label><label className="switch"><input type="checkbox" checked={dark} onChange={e=>setDark(e.target.checked)}/> Dark mode</label><div className="notice"><ShieldCheck/> This build uses browser LocalStorage. For real clinical deployment, add authenticated server storage, audit logs, backups, encryption and role enforcement.</div></div></Card></div>
+}
+
+function Toolbar({title,children}:{title:string;children?:React.ReactNode}) { return <div className="toolbar"><h2>{title}</h2><div>{children}</div></div> }
+function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}) { return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{title}</h3><button className="icon" onClick={close}><X/></button></div>{children}</div></div> }
+function List({rows}:{rows:{a:string;b:string|undefined;c:string;d:string}[]}) { return <div className="table-wrap"><table><thead><tr><th>Date</th><th>Patient</th><th>Details</th><th>Status</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.a}</td><td>{r.b||"—"}</td><td>{r.c}</td><td><span className="badge">{r.d}</span></td></tr>)}{rows.length===0&&<tr><td colSpan={4} className="empty">No records yet.</td></tr>}</tbody></table></div>
+}

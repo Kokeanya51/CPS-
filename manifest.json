@@ -1,0 +1,10 @@
+{
+  "name": "MaCoKi Patient Management System",
+  "short_name": "MaCoKi APMS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "description": "Clinic patient management and records PWA",
+  "icons": []
+}
