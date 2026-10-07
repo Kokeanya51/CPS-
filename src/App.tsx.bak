@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { ANCRecord, Drug, FollowUp, LabRequest, Patient, Role, Visit } from "./types";
 import { storage } from "./storage";
+import { createPatient, getPatients } from "./api";
 
 type Page = "Dashboard" | "Patients" | "Visits" | "Follow-ups" | "Pharmacy" | "Laboratory" | "ANC / Maternity" | "Reports" | "Settings";
 
@@ -27,14 +28,29 @@ export default function App() {
 
   const refresh = async () => {
     try {
+      const data = await getPatients();
+
+      setPatients(data);
+
+      // Keep the other application modules working
+      // while their Django API endpoints are integrated.
+      setVisits(storage.visits.all());
+      setFollowups(storage.followups.all());
+      setDrugs(storage.drugs.all());
+      setLabs(storage.labs.all());
+      setAnc(storage.anc.all());
+
+    } catch (error) {
+      console.error("Failed to load patients:", error);
+
+      // Fallback to existing local storage data
+      // if the Django API is temporarily unavailable.
       setPatients(storage.patients.all());
       setVisits(storage.visits.all());
       setFollowups(storage.followups.all());
       setDrugs(storage.drugs.all());
       setLabs(storage.labs.all());
       setAnc(storage.anc.all());
-    } catch (error) {
-      console.error("Failed to load application data:", error);
     }
   };
 
@@ -121,14 +137,8 @@ function Patients({patients,refresh}:{patients:Patient[];refresh:()=>void}) {
       return alert("First name and last name are required.");
     }
 
-    if (!form.dateOfBirth || !form.phone.trim() || !form.address.trim()) {
-      return alert("Date of birth, phone number and address are required.");
-    }
-
     try {
-      storage.patients.save({
-        id: crypto.randomUUID(),
-        hospitalNumber: `MKH-${Date.now()}`,
+      await createPatient({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         sex: form.sex,
@@ -138,7 +148,6 @@ function Patients({patients,refresh}:{patients:Patient[];refresh:()=>void}) {
         nextOfKin: form.nextOfKin.trim(),
         bloodGroup: form.bloodGroup,
         genotype: form.genotype,
-        createdAt: new Date().toISOString(),
       });
 
       setShow(false);
