@@ -11,7 +11,7 @@ type Page = "Dashboard" | "Patients" | "Visits" | "Follow-ups" | "Pharmacy" | "L
 
 const uid = () => crypto.randomUUID();
 const today = () => new Date().toISOString().slice(0, 10);
-
+const API = "http://127.0.0.1:8000/api";
 
 export default function App() {
   const [page, setPage] = useState<Page>("Dashboard");
@@ -27,14 +27,35 @@ export default function App() {
 
   const refresh = async () => {
     try {
+      const response = await fetch(`${API}/patients/`);
+
+      if (!response.ok) {
+        throw new Error(`Patients API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      setPatients(data);
+
+      // Keep the other application modules working
+      // while their Django API endpoints are integrated.
+      setVisits(storage.visits.all());
+      setFollowups(storage.followups.all());
+      setDrugs(storage.drugs.all());
+      setLabs(storage.labs.all());
+      setAnc(storage.anc.all());
+
+    } catch (error) {
+      console.error("Failed to load patients:", error);
+
+      // Fallback to existing local storage data
+      // if the Django API is temporarily unavailable.
       setPatients(storage.patients.all());
       setVisits(storage.visits.all());
       setFollowups(storage.followups.all());
       setDrugs(storage.drugs.all());
       setLabs(storage.labs.all());
       setAnc(storage.anc.all());
-    } catch (error) {
-      console.error("Failed to load application data:", error);
     }
   };
 
@@ -116,51 +137,7 @@ function Patients({patients,refresh}:{patients:Patient[];refresh:()=>void}) {
   const [q,setQ]=useState(""); const [show,setShow]=useState(false);
   const [form,setForm]=useState({firstName:"",lastName:"",sex:"Female" as Patient["sex"],dateOfBirth:"",phone:"",address:"",nextOfKin:"",bloodGroup:"",genotype:""});
   const list=patients.filter(p=>(p.firstName+" "+p.lastName+" "+p.hospitalNumber+" "+p.phone).toLowerCase().includes(q.toLowerCase()));
-  const save = async () => {
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      return alert("First name and last name are required.");
-    }
-
-    if (!form.dateOfBirth || !form.phone.trim() || !form.address.trim()) {
-      return alert("Date of birth, phone number and address are required.");
-    }
-
-    try {
-      storage.patients.save({
-        id: crypto.randomUUID(),
-        hospitalNumber: `MKH-${Date.now()}`,
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        sex: form.sex,
-        dateOfBirth: form.dateOfBirth,
-        phone: form.phone.trim(),
-        address: form.address.trim(),
-        nextOfKin: form.nextOfKin.trim(),
-        bloodGroup: form.bloodGroup,
-        genotype: form.genotype,
-        createdAt: new Date().toISOString(),
-      });
-
-      setShow(false);
-
-      setForm({
-        firstName: "",
-        lastName: "",
-        sex: "Female",
-        dateOfBirth: "",
-        phone: "",
-        address: "",
-        nextOfKin: "",
-        bloodGroup: "",
-        genotype: "",
-      });
-
-      await refresh();
-    } catch (error) {
-      console.error("Failed to create patient:", error);
-      alert("Failed to register patient. Please try again.");
-    }
-  };
+  const save=()=>{ if(!form.firstName||!form.lastName) return alert("First name and last name are required."); storage.patients.save({id:uid(),hospitalNumber:`MAC-${String(patients.length+1).padStart(4,"0")}`,...form,createdAt:new Date().toISOString()}); setShow(false); setForm({...form,firstName:"",lastName:""}); refresh(); };
   return <div>
     <Toolbar title="Patient registry"><button className="primary" onClick={()=>setShow(true)}><Plus size={18}/> Register patient</button></Toolbar>
     <div className="search"><Search size={18}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search name, hospital number or phone"/></div>
